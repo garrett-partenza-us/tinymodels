@@ -18,8 +18,22 @@ np.seterr(all="warn", over="raise")
 
 # hyperparameters
 EPOCHS = 10000
-BATCH_SIZE = 1
-LR = 1e-3
+BATCH_SIZE = 16
+LR1 = 1e-3
+LR2 = 1e-5
+
+lr_path = "/home/partenza.g/tinymodels/Data/LR/{}.png"
+hr_path = "/home/partenza.g/tinymodels/Data/HR/{}.png"
+
+def get_batch(bs, test=False):
+    idxs = np.random.randint(1,81,bs) if not test else np.random.randint(81,100,bs)
+    lr = np.array(
+        [cv2.imread(lr_path.format(idx)) for idx in idxs]
+    )
+    hr = np.array(
+        [cv2.imread(hr_path.format(idx)) for idx in idxs]
+    )
+    return lr, hr
 
 # batch img
 def batchify(img, bs=8):
@@ -34,11 +48,11 @@ def norm(batch):
     return batch/255.0
 
 # mean squared error
-def lossfn(pred, target):
-    return target.sub(pred).square().mean()
+def lossfn(p1, p2, p3, t1, t2, t3):
+    return t1.sub(p1).square().mean()+t2.sub(p2).square().mean()+t3.sub(p3).square().mean()
 
 # reconstruct image patches
-def jigsaw_to_image(x, grid_size=(16, 16)):
+def jigsaw_to_image(x, grid_size=(20, 20)):
     batch_size, num_patches, c, jigsaw_h, jigsaw_w = x.shape
     assert num_patches == grid_size[0] * grid_size[1]
     x_image = x.reshape(batch_size, grid_size[0], grid_size[1], c, jigsaw_h, jigsaw_w)
@@ -52,63 +66,94 @@ def jigsaw_to_image(x, grid_size=(16, 16)):
 small, large = load_sat_rep("plots/small.jpg", "plots/large.jpg")
 
 # initialize model
-vit = ViT(
-    layers=3,
-    num_heads=8,
-    img_dim=(400,400),
-    out_dim=None,
-    hid_dim=512,
-    patch_size=25,
-    batch=BATCH_SIZE
-)
-optim = optim.Adam(get_parameters(vit), lr=LR)
+vit = ViT()
+optim1 = optim.Adam(get_parameters(vit.cnn1)+get_parameters(vit.cnn2)+get_parameters(vit.bn1)+get_parameters(vit.bn2), lr=LR1)
+optim2 = optim.Adam(get_parameters(vit.cnn3), lr=LR2)
 
-Tensor.traning = True
 
 # training loop
 for i in range(EPOCHS):
     
+    # train mode
+    Tensor.traning = True 
+    
+    # get batch
+    x, target = get_batch(BATCH_SIZE)
+        
     # build input tensor
-    x = copy.deepcopy(small) #h, w, c
-    x = batchify(x, bs=BATCH_SIZE) # batch, h, w, c
-    x = patch(x, BATCH_SIZE) # batch, patches, p_h, p_w, c
-    x = norm(x) # batch, patches, p_h, p_w, c
-    x = Tensor(x) # batch, patches, p_h, p_w, c
+    x = Tensor(norm(x), requires_grad=True)
     x.gpu()
-    x.requires_grad=True
     
     # build target tensor
-    target = copy.deepcopy(large)
-    target = batchify(target, bs=BATCH_SIZE) # batch, h, w, c
-    target = norm(target) # batch, h, w, c 
-    target = Tensor(target) # batch, h, w, c
-    target = target.permute(0,3,1,2)
-    target.gpu()
-    target.requires_grad=True
-    
+    target = Tensor(norm(target), requires_grad=True) # batch, h, w, c 
+    t1 = target[:,:,:,0].reshape(BATCH_SIZE, 384, 384, 1)
+    t2 = target[:,:,:,1].reshape(BATCH_SIZE, 384, 384, 1)
+    t3 = target[:,:,:,2].reshape(BATCH_SIZE, 384, 384, 1)
+    t1.gpu()
+    t2.gpu()
+    t3.gpu()
+        
     # forward pass
-    pred = vit.forward(x) # batch, patches, features
-    pred = pred.reshape(BATCH_SIZE, 256, 3, 64, 64) # batch, patches, c, p_h, p_w
-    pred = jigsaw_to_image(pred) # batch, c, h, w
+    p1, p2, p3 = vit.forward(x) # batch, patches, features
     
     # backward pass
-    loss = lossfn(pred, target)
-    optim.zero_grad()
+    loss = lossfn(p1, p2, p3, t1, t2, t3)
+    optim1.zero_grad()
+    optim2.zero_grad()
     loss.backward()
-    optim.step()
+    optim1.clipnorm()
+    optim2.clipnorm()
+    optim1.step()
+    optim2.step()
     
-    # print loss to stdout
-    print("Iter: {}, Loss: {}".format(i, loss.data[0]))
+    if i%10==0:
+
+        # build train image
+        pred_train = np.concatenate(list(p[0].detach().cpu().data for p in (p1, p2, p3)), axis=-1)
+        target_train = target[0].detach().cpu().data
+        train_img = np.hstack((pred_train, target_train))
+               
+        # eval mode
+        Tensor.traning = False 
     
-    # save predicted image every 10 iterations
-    if i % 100 == 0:
-        pred = pred.detach().cpu() # batch, c, h, w
-        img = pred[0].data # c, h, w
-        img = img.transpose(1,2,0) # h, w, c
-        img = (img*255).astype(np.uint8) # h, w, c
-        cv2.imwrite("plots/iter_{}.jpg".format(i), img)
-        del img
+        # get batch
+        x, target = get_batch(BATCH_SIZE, test=True)
+
+        # build input tensor
+        x = Tensor(norm(x), requires_grad=False)
+        x.gpu()
+
+        # build target tensor
+        target = Tensor(norm(target), requires_grad=False) # batch, h, w, c 
+        t1 = target[:,:,:,0].reshape(BATCH_SIZE, 384, 384, 1)
+        t2 = target[:,:,:,1].reshape(BATCH_SIZE, 384, 384, 1)
+        t3 = target[:,:,:,2].reshape(BATCH_SIZE, 384, 384, 1)
+        t1.gpu()
+        t2.gpu()
+        t3.gpu()
+        
+        # forward pass
+        p1, p2, p3 = vit.forward(x) # batch, patches, features
+
+        # backward pass
+        loss_test = lossfn(p1, p2, p3, t1, t2, t3)
+        
+        # log train and test loss
+        print(i, loss.data[0], loss_test.data[0])
+        
+        # build test image
+        pred_test = np.concatenate(list(p[0].detach().cpu().data for p in (p1, p2, p3)), axis=-1)
+        target_test = target[0].detach().cpu().data
+        test_img = np.hstack((pred_test, target_test))
+        
+        # stack train and test images
+        img_stack = np.vstack((train_img, test_img))
+        img_stack = (img_stack*255).astype(np.uint8)
+        cv2.imwrite("/home/partenza.g/tinymodels/vit/plots/iter_{}.jpg".format(i), img_stack)
+        
+        del pred_train, target_train, pred_test, target_test, train_img, test_img, img_stack, loss_test
+     
         
     # clear cuda memory
-    del x, target, pred, loss
+    del x, target, p1, p2, p3, t1, t2, t3, loss
     
