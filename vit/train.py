@@ -67,18 +67,8 @@ def jigsaw_to_image(x, grid_size=(20, 20)):
 
 # initialize model
 vit = ViT()
-optim1 = optim.Adam(
-    get_parameters(vit.cnn1)+
-    get_parameters(vit.cnn2)+
-    get_parameters(vit.bn1)+
-    get_parameters(vit.bn2),
-    lr=LR1
-)
-
-optim2 = optim.Adam(
-    get_parameters(vit.cnn3),
-    lr=LR2
-)
+optim1 = optim.Adam(get_parameters(vit.cnn1)+get_parameters(vit.cnn2)+get_parameters(vit.bn1)+get_parameters(vit.bn2), lr=LR1)
+optim2 = optim.Adam(get_parameters(vit.cnn3), lr=LR2)
 
 loss_train = []
 loss_eval = []
@@ -169,6 +159,8 @@ for i in tqdm(range(EPOCHS)):
      
     # save 81 image pred every 10 epochs for gif 
     if i%20==0:
+        
+        Tensor.traning = False 
         
         x = np.array(cv2.imread(lr_path.format(93)))
 
