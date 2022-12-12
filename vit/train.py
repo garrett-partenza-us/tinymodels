@@ -20,7 +20,7 @@ from patchify import patchify
 np.seterr(all="warn", over="raise")
 
 # hyperparameters
-EPOCHS = 2000
+EPOCHS = 1
 BATCH_SIZE = 16
 LR1 = 1e-3
 LR2 = 1e-5
@@ -108,79 +108,79 @@ for i in tqdm(range(EPOCHS)):
     optim1.step()
     optim2.step()
     
-    loss_train.append(loss.data[0])
+#     loss_train.append(loss.data[0])
     
-    if i%100==0:
+#     if i%100==0:
 
-        # build train image
-        pred_train = np.concatenate(list(p[0].detach().cpu().data for p in (p1, p2, p3)), axis=-1)
-        target_train = target[0].detach().cpu().data
-        train_img = np.hstack((pred_train, target_train))
+#         # build train image
+#         pred_train = np.concatenate(list(p[0].detach().cpu().data for p in (p1, p2, p3)), axis=-1)
+#         target_train = target[0].detach().cpu().data
+#         train_img = np.hstack((pred_train, target_train))
                
-        # eval mode
-        Tensor.traning = False 
+#         # eval mode
+#         Tensor.traning = False 
     
-        # get batch
-        x, target = get_batch(BATCH_SIZE, test=True)
+#         # get batch
+#         x, target = get_batch(BATCH_SIZE, test=True)
 
-        # build input tensor
-        x = Tensor(norm(x), requires_grad=False)
-        x.gpu()
+#         # build input tensor
+#         x = Tensor(norm(x), requires_grad=False)
+#         x.gpu()
 
-        # build target tensor
-        target = Tensor(norm(target), requires_grad=False) # batch, h, w, c 
-        t1 = target[:,:,:,0].reshape(BATCH_SIZE, 384, 384, 1)
-        t2 = target[:,:,:,1].reshape(BATCH_SIZE, 384, 384, 1)
-        t3 = target[:,:,:,2].reshape(BATCH_SIZE, 384, 384, 1)
-        t1.gpu()
-        t2.gpu()
-        t3.gpu()
+#         # build target tensor
+#         target = Tensor(norm(target), requires_grad=False) # batch, h, w, c 
+#         t1 = target[:,:,:,0].reshape(BATCH_SIZE, 384, 384, 1)
+#         t2 = target[:,:,:,1].reshape(BATCH_SIZE, 384, 384, 1)
+#         t3 = target[:,:,:,2].reshape(BATCH_SIZE, 384, 384, 1)
+#         t1.gpu()
+#         t2.gpu()
+#         t3.gpu()
         
-        # forward pass
-        p1, p2, p3 = vit.forward(x) # batch, patches, features
+#         # forward pass
+#         p1, p2, p3 = vit.forward(x) # batch, patches, features
 
-        # backward pass
-        loss_test = lossfn(p1, p2, p3, t1, t2, t3)
+#         # backward pass
+#         loss_test = lossfn(p1, p2, p3, t1, t2, t3)
         
-        # log loss
-        loss_eval.append(loss_test.data[0])
+#         # log loss
+#         loss_eval.append(loss_test.data[0])
                 
-        # build test image
-        pred_test = np.concatenate(list(p[0].detach().cpu().data for p in (p1, p2, p3)), axis=-1)
-        target_test = target[0].detach().cpu().data
-        test_img = np.hstack((pred_test, target_test))
+#         # build test image
+#         pred_test = np.concatenate(list(p[0].detach().cpu().data for p in (p1, p2, p3)), axis=-1)
+#         target_test = target[0].detach().cpu().data
+#         test_img = np.hstack((pred_test, target_test))
         
-        # stack train and test images
-        img_stack = np.vstack((train_img, test_img))
-        img_stack = (img_stack*255).astype(np.uint8)
-        cv2.imwrite("/home/partenza.g/tinymodels/vit/plots/plot_{}.jpg".format(i), img_stack)
+#         # stack train and test images
+#         img_stack = np.vstack((train_img, test_img))
+#         img_stack = (img_stack*255).astype(np.uint8)
+#         cv2.imwrite("/home/partenza.g/tinymodels/vit/plots/plot_{}.jpg".format(i), img_stack)
         
-        del pred_train, target_train, pred_test, target_test, train_img, test_img, img_stack, loss_test
+#         del pred_train, target_train, pred_test, target_test, train_img, test_img, img_stack, loss_test
      
-    # save 81 image pred every 10 epochs for gif 
-    if i%20==0:
+#     # save 81 image pred every 10 epochs for gif 
+#     if i%20==0:
         
-        Tensor.traning = False 
+#         Tensor.traning = False 
         
-        x = np.array(cv2.imread(lr_path.format(93)))
+#         x = np.array(cv2.imread(lr_path.format(93)))
 
-        # build input tensor
-        x = Tensor(norm(batchify(x, bs=1)), requires_grad=False)
-        x.gpu()
+#         # build input tensor
+#         x = Tensor(norm(batchify(x, bs=1)), requires_grad=False)
+#         x.gpu()
         
-        # forward pass
-        p1, p2, p3 = vit.forward(x) # batch, patches, features
+#         # forward pass
+#         p1, p2, p3 = vit.forward(x) # batch, patches, features
         
-        # build test image
-        pred_test = np.concatenate(list(p[0].detach().cpu().data for p in (p1, p2, p3)), axis=-1)
-        pred_test = (pred_test*255).astype(np.uint8)
+#         # build test image
+#         pred_test = np.concatenate(list(p[0].detach().cpu().data for p in (p1, p2, p3)), axis=-1)
+#         pred_test = (pred_test*255).astype(np.uint8)
         
-        cv2.imwrite("/home/partenza.g/tinymodels/vit/plots/gif_{}.jpg".format(i), pred_test)
+#         cv2.imwrite("/home/partenza.g/tinymodels/vit/plots/gif_{}.jpg".format(i), pred_test)
         
-        del pred_test
+#         del pred_test
         
-    # clear cuda memory
-    del x, target, p1, p2, p3, t1, t2, t3, loss
+#     # clear cuda memory
+#     del x, target, p1, p2, p3, t1, t2, t3, loss
     
     
 # save model
