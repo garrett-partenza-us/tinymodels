@@ -11,4 +11,4 @@
 
 cd /home/partenza.g/tinymodels/vit
 source env/bin/activate
-GPU=1 python train-sat-rep.py
+GPU=1 python train.py

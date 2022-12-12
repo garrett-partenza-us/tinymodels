@@ -4,11 +4,11 @@
 #SBATCH --gres=gpu:t4:1
 #SBATCH --time=08:00:00
 #SBATCH --job-name=sr
-#SBATCH --mem=16GB
+#SBATCH --mem=32GB
 #SBATCH --ntasks=1
-#SBATCH --output=myjob.%j.out
-#SBATCH --error=myjob.%j.err
+#SBATCH --output=esrcnn.out
+#SBATCH --error=esrcnn.err
 
 cd /home/partenza.g/tinymodels/vit
 source env/bin/activate
-GPU=1 LAZY=1 python train-sat-rep.py
+GPU=1 python train.py

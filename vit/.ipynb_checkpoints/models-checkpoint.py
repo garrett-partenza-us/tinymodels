@@ -26,12 +26,24 @@ class ViT:
         )
         
         self.cnn3 = (
+            Tensor.uniform(64, 64, 5, 5),
+            Tensor.zeros(64)
+        )
+        
+        self.cnn4 = (
+            Tensor.uniform(64, 64, 3, 3),
+            Tensor.zeros(64)
+        )
+        
+        self.cnn5 = (
             Tensor.uniform(3*(4**2), 64, 3, 3),
             Tensor.zeros(3*(4**2))
         )
         
         self.bn1 = BatchNorm2D(64)
         self.bn2 = BatchNorm2D(64)
+        self.bn3 = BatchNorm2D(64)
+        self.bn4 = BatchNorm2D(64)
                                
     
     def upsample(x):
@@ -56,8 +68,10 @@ class ViT:
     def forward(self, x): # batch, h, w, c
         x = x.permute(0,3,1,2) # batch, c, h, w
         x = self.bn1(x.conv2d(*self.cnn1, stride=1, padding=2).tanh()) # batch, c, h, w
-        x = self.bn2(x.conv2d(*self.cnn2, stride=1, padding=1).tanh()) # batch, c, h, w
-        x = x.conv2d(*self.cnn3, stride=1, padding=1) # batch, c, h, w
+        x = self.bn2(x.conv2d(*self.cnn2, stride=1, padding=1).tanh()) + x # batch, c, h, w
+        x = self.bn3(x.conv2d(*self.cnn3, stride=1, padding=2).tanh()) + x # batch, c, h, w
+        x = self.bn4(x.conv2d(*self.cnn4, stride=1, padding=1).tanh()) + x # batch, c, h, w
+        x = x.conv2d(*self.cnn5, stride=1, padding=1) # batch, c, h, w
         x = x.permute(0,2,3,1) # batch, h, w, c
         
         scale = 4
