@@ -6,6 +6,8 @@ from dataloaders import load_sat_rep
 from models import ViT
 
 # external
+import pickle
+from tqdm import tqdm
 from tinygrad.tensor import Tensor
 from tinygrad.nn.optim import get_parameters
 import tinygrad.nn.optim as optim
@@ -13,14 +15,14 @@ import numpy as np
 import cv2
 from patchify import patchify
 
+
 # raise error on overflow caused by gelu
 np.seterr(all="warn", over="raise")
 
 # hyperparameters
-EPOCHS = 10000
+EPOCHS = 2000
 BATCH_SIZE = 16
-LR1 = 1e-3
-LR2 = 1e-5
+LR = 1e-3
 
 lr_path = "/home/partenza.g/tinymodels/Data/LR/{}.png"
 hr_path = "/home/partenza.g/tinymodels/Data/HR/{}.png"
@@ -62,27 +64,18 @@ def jigsaw_to_image(x, grid_size=(20, 20)):
     x_image = x_image.reshape(batch_size, c, output_h, output_w)
     return x_image
 
-# load dataset
-small, large = load_sat_rep("plots/small.jpg", "plots/large.jpg")
-
 # initialize model
 vit = ViT()
-optim1 = optim.Adam(
-    get_parameters(vit.cnn1)+
-    get_parameters(vit.cnn2)+
-    get_parameters(vit.cnn3)+
-    get_parameters(vit.cnn4)+
-    get_parameters(vit.bn1)+
-    get_parameters(vit.bn2)+
-    get_parameters(vit.bn3)+
-    get_parameters(vit.bn4),
-    lr=LR1
+optim = optim.Adam(
+    get_parameters(vit.kernel),
+    lr=LR
 )
-optim2 = optim.Adam(get_parameters(vit.cnn5), lr=LR2)
 
+loss_train = []
+loss_eval = []
 
 # training loop
-for i in range(EPOCHS):
+for i in tqdm(range(EPOCHS)):
     
     # train mode
     Tensor.traning = True 
@@ -108,15 +101,14 @@ for i in range(EPOCHS):
     
     # backward pass
     loss = lossfn(p1, p2, p3, t1, t2, t3)
-    optim1.zero_grad()
-    optim2.zero_grad()
+    optim.zero_grad()
     loss.backward()
-    optim1.clipnorm()
-    optim2.clipnorm()
-    optim1.step()
-    optim2.step()
+    optim.clipnorm()
+    optim.step()
     
-    if i%10==0:
+    loss_train.append(loss.data[0])
+    
+    if i%100==0:
 
         # build train image
         pred_train = np.concatenate(list(p[0].detach().cpu().data for p in (p1, p2, p3)), axis=-1)
@@ -148,9 +140,9 @@ for i in range(EPOCHS):
         # backward pass
         loss_test = lossfn(p1, p2, p3, t1, t2, t3)
         
-        # log train and test loss
-        print(i, loss.data[0], loss_test.data[0])
-        
+        # log loss
+        loss_eval.append(loss_test.data[0])
+                
         # build test image
         pred_test = np.concatenate(list(p[0].detach().cpu().data for p in (p1, p2, p3)), axis=-1)
         target_test = target[0].detach().cpu().data
@@ -159,11 +151,39 @@ for i in range(EPOCHS):
         # stack train and test images
         img_stack = np.vstack((train_img, test_img))
         img_stack = (img_stack*255).astype(np.uint8)
-        cv2.imwrite("/home/partenza.g/tinymodels/vit/plots/iter_{}.jpg".format(i), img_stack)
+        cv2.imwrite("/home/partenza.g/tinymodels/vit/plots/plot_{}.jpg".format(i), img_stack)
         
         del pred_train, target_train, pred_test, target_test, train_img, test_img, img_stack, loss_test
      
+    # save 81 image pred every 10 epochs for gif 
+    if i%20==0:
+        
+        x = np.array(cv2.imread(lr_path.format(93)))
+
+        # build input tensor
+        x = Tensor(norm(batchify(x, bs=1)), requires_grad=False)
+        x.gpu()
+        
+        # forward pass
+        p1, p2, p3 = vit.forward(x) # batch, patches, features
+        
+        # build test image
+        pred_test = np.concatenate(list(p[0].detach().cpu().data for p in (p1, p2, p3)), axis=-1)
+        pred_test = (pred_test*255).astype(np.uint8)
+        
+        cv2.imwrite("/home/partenza.g/tinymodels/vit/plots/gif_{}.jpg".format(i), pred_test)
+        
+        del pred_test
         
     # clear cuda memory
     del x, target, p1, p2, p3, t1, t2, t3, loss
     
+    
+# save model
+# filehandler = open("model.tg", 'w') 
+# pickle.dump(vit.__reduce__(), filehandler)
+
+# save losses
+np.save("losstrain.npy", np.array(loss_train))
+np.save("losseval.npy", np.array(loss_eval))
+
