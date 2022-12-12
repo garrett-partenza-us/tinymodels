@@ -32,12 +32,6 @@ class ViT:
         
         self.bn1 = BatchNorm2D(64)
         self.bn2 = BatchNorm2D(64)
-                               
-    
-    def upsample(x):
-        bs,c,py,px = x.shape
-        x = x.reshape(bs, c, py, 1, px, 1).expand(bs, c, py, 2, px, 2).reshape(bs, c, py*2, px*2)
-        return x, conv(x)
     
     def phase_shift(self, inpt, scale):
         b, w, h, _ = inpt.shape
